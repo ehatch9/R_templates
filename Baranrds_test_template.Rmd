@@ -61,7 +61,7 @@ remotes::install_github("FredHutch/VISCfunctions", build_vignettes = TRUE)
 vignette("Overview")
 library(VISCfunctions)
 
-#Vignette test
+#Vignette test. Dplyr example
 data(exampleData_BAMA)
 
 group_testing <- exampleData_BAMA %>%
@@ -71,13 +71,16 @@ group_testing <- exampleData_BAMA %>%
                method = 'barnard', alternative = 'less',
                num_needed_for_test = 3, digits = 1,
                trailing_zeros = TRUE, sep_val = ' vs. ', verbose = TRUE)))
+group_testing
+```
 
+
+```{r}
+# Base R example
 set.seed(1)
 x_example = c(NA,sample(0:1,50,replace = TRUE, prob = c(.75,.25)),
   sample(0:1,50,replace = TRUE, prob = c(.25,.75)),0,0,1,1)
 group_example = c(rep(1,25),NA,rep(2,25),rep(3,25),rep(4,25),'a','a','b','b')
-
-pairwise_test_bin(x_example,group_example, num_needed_for_test = 2)
 
 test <- pairwise_test_bin(
 x_example,group_example,
