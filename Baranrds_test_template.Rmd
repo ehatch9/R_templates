@@ -49,3 +49,40 @@ I also added a column that automatically adds a star to data that is significant
 geom_text(data = stats, aes(x = condition, y = 0.6, label = paste(significant)))
 
 Note that for a large table this is going to take a good chunk of time to run, so you may need to be a bit patient.
+
+#### Alternative method for pairwise Barnard's test.
+This uses a package from the Fred Hutch Vaccine Immunology Statistical Center. 
+
+Input: two vectors, x with 0/1, or logical vector, or T/F  (for us, equivalent of y/n) and y, which is the categories. Sums up the frequencies, but it's hard to get that out of the resulting data frame, and performs Barnards. There is not a correction, I think, for multiple hypothesis testing. See example for extracting vectors from a grouped dataframe.  https://rdrr.io/github/FredHutch/VISCfunctions/man/pairwise_test_bin.html
+
+```{r}
+install.packages("remotes")
+remotes::install_github("FredHutch/VISCfunctions", build_vignettes = TRUE)
+vignette("Overview")
+library(VISCfunctions)
+
+#Vignette test
+data(exampleData_BAMA)
+
+group_testing <- exampleData_BAMA %>%
+   group_by(antigen, visitno) %>%
+   group_modify(~ as.data.frame(
+       pairwise_test_bin(x = .$response, group = .$group,
+               method = 'barnard', alternative = 'less',
+               num_needed_for_test = 3, digits = 1,
+               trailing_zeros = TRUE, sep_val = ' vs. ', verbose = TRUE)))
+
+set.seed(1)
+x_example = c(NA,sample(0:1,50,replace = TRUE, prob = c(.75,.25)),
+  sample(0:1,50,replace = TRUE, prob = c(.25,.75)),0,0,1,1)
+group_example = c(rep(1,25),NA,rep(2,25),rep(3,25),rep(4,25),'a','a','b','b')
+
+pairwise_test_bin(x_example,group_example, num_needed_for_test = 2)
+
+test <- pairwise_test_bin(
+x_example,group_example,
+  sorted_group = c(1:4, 'a','b'),num_needed_for_test = 2)
+
+test
+```
+
