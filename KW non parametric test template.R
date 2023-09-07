@@ -1,4 +1,5 @@
 #### Krusikal-Wallis test with Dunn's multiple comparison adjustment
+# Non-parametric Anova
 
 # reorder column values
 df$x <- factor(df$x,
@@ -19,3 +20,8 @@ df_p_multi <- df %>%
   add_xy_position(x = "x")
 
 df_p_multi
+
+# add pairwise p-values to plot
+
+p + 
+  stat_pvalue_manual(df_p_multi, tip.length = 0)
