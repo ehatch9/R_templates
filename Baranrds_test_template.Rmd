@@ -9,83 +9,110 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(cache = TRUE, echo = TRUE, warning = FALSE, message = FALSE, error = FALSE, fig_width = 4, fig_height = 6, fig_retina = TRUE, dev = c("png", "pdf")) 
+knitr::opts_chunk$set(cache = TRUE, echo = TRUE, warning = FALSE, message = FALSE, error = FALSE) 
 ```
 
 #### Objective
-Add the results of Barnard’s test to a dataframe in R
+Statistical analysis of 2x2 tables in R
 
-#### Pseudocode
-load the necessary libraries
-create a dataframe
-identify the control values for comparison
-use rowwise() and mutate() to create a column for the results
-format to call the correct results barnard.test()$p.value[2]
-Note that this will call the two-sided p-value, if you would like to switch to a 1-sided test you can change it to say barnard.test()$p.value[1]
+#### Approach 1: Compare all samples to a control sample (Amanda's code)
+Input is a dataframe of counts.
 
-```{r dependencies}
+```{r all versus 1}
 library(Barnard)
 library(tidyverse)
 
-categories <- data.frame(condition = c('DMSO', 'BLEB', 'B5', 'B6', 'B7_2uM', 'B8', 'D9', 'B7_500nM'), 
+df_1 <- data.frame(condition = c('DMSO', 'BLEB', 'B5', 'B6', 'B7_2uM', 'B8', 'D9', 'B7_500nM'), 
      NOTRUP = c(155, 155, 122, 163, 175, 211, 130, 168),
      RUP = c(55, 28, 38, 47, 46, 40, 58, 38))
 
-ctrl <- categories %>% filter(grepl('DMSO', condition))
+ctrl <- df_1 %>% filter(grepl('DMSO', condition))
 
-NEGctrl <- ctrl$NOTRUP
-POSctrl <- ctrl$RUP
+NEGctrl <- ctrl$NOTRUP # output is a single named value
+POSctrl <- ctrl$RUP # output is a single named value
 
 stats <- categories %>%
      rowwise() %>%
      mutate('p' = barnard.test(NEGctrl, NOTRUP, POSctrl, RUP)$p.value[2]
-          ) %>%
+          ) %>% # p.value[2] specifies which value in the output to report in the 'p' column
      mutate('significant' = case_when(
-          p <= 0.05 ~ '*'))
+          p <= 0.05 ~ '*')) # adds column of p value text
 ```
+#### Approach 2: All versus all pairwise comparisons.
+This uses a package from the Fred Hutch Vaccine Immunology Statistical Center. https://rdrr.io/github/FredHutch/VISCfunctions/man/pairwise_test_bin.html
 
-I also added a column that automatically adds a star to data that is significant so you could add this to a graph easily using
+In this approach, the data is transformed into a case table and then analyzed by chisquare.
 
-geom_text(data = stats, aes(x = condition, y = 0.6, label = paste(significant)))
+This data is further simplified into two vectors: sample id and logical value.
 
-Note that for a large table this is going to take a good chunk of time to run, so you may need to be a bit patient.
+After the significance of all possible combinations are calculated, results are filtered to those of interest and a post-test is performed.
 
-#### Alternative method for pairwise Barnard's test.
-This uses a package from the Fred Hutch Vaccine Immunology Statistical Center. 
-
-Input: two vectors, x with 0/1, or logical vector, or T/F  (for us, equivalent of y/n) and y, which is the categories. Sums up the frequencies, but it's hard to get that out of the resulting data frame, and performs Barnards. There is not a correction, I think, for multiple hypothesis testing. See example for extracting vectors from a grouped dataframe.  https://rdrr.io/github/FredHutch/VISCfunctions/man/pairwise_test_bin.html
-
-```{r}
+Example input: dataframe of counts, with ColNames = Condition, Intact, Rupture. 
+```{r all versus all}
 install.packages("remotes")
 remotes::install_github("FredHutch/VISCfunctions", build_vignettes = TRUE)
-vignette("Overview")
+library(tidyverse)
 library(VISCfunctions)
+library(rstatix)
+```
+Generate contingency table for chi-square analysis from count dataframe df_1
 
-#Vignette test. Dplyr example
-data(exampleData_BAMA)
+```{r all versus all}
+# generate a contingency table from dataframe with pooled values. This is used as input to chi square
+table_pooled <- df_1 %>%
+  column_to_rownames(var = "condition") %>%
+  select(NOTRUP, RUP) %>%
+  as.matrix()
 
-group_testing <- exampleData_BAMA %>%
-   group_by(antigen, visitno) %>%
-   group_modify(~ as.data.frame(
-       pairwise_test_bin(x = .$response, group = .$group,
-               method = 'barnard', alternative = 'less',
-               num_needed_for_test = 3, digits = 1,
-               trailing_zeros = TRUE, sep_val = ' vs. ', verbose = TRUE)))
-group_testing
+#Add category names to rows and columns of contingency table.
+condition <- rownames(table_pooled)  
+dimnames(table_pooled) = list("Condition" = condition, "Rupture" = c("NOTRUP", "RUP"))
+
+str(table_pooled)
+```
+Run chi square
+```{r all versus all}
+chisq.test(table_pooled)
+```
+Convert contingency table to vectors for multiple Barnard's test.
+```{r all versus all}
+df_cases <- table_pooled %>%
+  counts_to_cases()
+
+#convert case factor variable to binary numbers
+df_cases$Rupture <- as.character(df_cases$Rupture) # Necessary if some factors were used
+df_cases$Rupture[(df_cases$Rupture == "NOTRUP")] <- 0 # Take the subset of values in column "Rupture" of dataframe df_cases that equal "NOTRUP" and replace them with the value "0".
+df_cases$Rupture[(df_cases$Rupture == "RUP")] <- 1 
+df_cases$Rupture <- as.numeric(df_cases$Rupture)
+
+# Run barnard's test after modifying the groups to be vectors
+B_pair <- df_cases %>%
+  group_modify(~ as.data.frame(
+       pairwise_test_bin(x = .$Rupture, group = .$Condition)))
+
+B_pair
 ```
 
+```{r all versus all}
+# add a text p-value column
+B_pair <- B_pair %>% 
+  add_significance(p.col = "ResponseTest", output.col = "p_value") 
 
-```{r}
-# Base R example
-set.seed(1)
-x_example = c(NA,sample(0:1,50,replace = TRUE, prob = c(.75,.25)),
-  sample(0:1,50,replace = TRUE, prob = c(.25,.75)),0,0,1,1)
-group_example = c(rep(1,25),NA,rep(2,25),rep(3,25),rep(4,25),'a','a','b','b')
+# filter for useful comparisons
+B_pair_s <- B_pair %>%
+  filter(Comparison == "DMSO vs. BLEB" | Comparison == "DMSO vs. B5" | Comparison == "DMSO vs. B8")
+```
 
-test <- pairwise_test_bin(
-x_example,group_example,
-  sorted_group = c(1:4, 'a','b'),num_needed_for_test = 2)
+Perform post-test
+```{r all versus all}
+# Split "Comparison" column into group 1 and 2 to calculate adjusted pvalue
+B_pair_sigf <- B_pair_s %>%
+  separate_wider_delim(cols = Comparison, delim = " vs. ", names = c("group1", "group2")) %>%
+  adjust_pvalue(p.col = "ResponseTest", output.col = "p.adjust", method = "BH") %>%
+  add_significance(p.col = "p.adjust", output.col = "p.adjust.value") #%>%
+  mutate(y.position = c(1, 1.1, 0.9, 0.95, 0.8, 0.7)) # manually add y positions for graphing
 
-test
+B_pair_sigf
+
 ```
 

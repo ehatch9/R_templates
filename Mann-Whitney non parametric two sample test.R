@@ -1,19 +1,36 @@
-### Wilcoxon/Mann-Whitney test for differences between medians only in non-parametric tests.
-# Can use K-S test for differeneces between medians or distribution - more sensitive.
+### Wilcoxon/Mann-Whitney test for differences between 2 medians in non-parametric tests
+# I prefer this over the K-S non-parametric test because K-S assess differences between medians or distribution - more likely to give you "significance" but often not clear that a change in distribution is biologically significant. Sometimes it is. Depends on your question. 
 
+library(tidyverse)
 library(rstatix)
+library(ggbeeswarm)
+library(ggpubr)
 
-# Calculate pairwise p values 
-df$treat <- factor(df$treat, levels = c("DMSO_chr18", "TSA_chr18", "DMSO_chr19", "methyl_chr19")) #Set order prior to running test to add appropriate x positions
+# Import values and filter to two groups
+c_df <- read.csv("continuous_df.csv") %>%
+  filter(protein %in% c("Ran", "RCC1"))
 
-df_p <- df %>% 
-  wilcox_test(y ~ x) %>% 
+# order column values
+c_df$protein <- factor(c_df$protein,
+                       levels = c("Ran", "RCC1"))
+
+df_p <- c_df %>%
+  ungroup() %>% 
+  wilcox_test(mn_pn ~ protein) %>% # format for formula is test(y ~ x)
   add_significance() %>%
-  add_xy_position(x = "x")
+  add_xy_position()
 
 df_p
 
 # Add p values to ggplot
 
-p + 
-  stat_pvalue_manual(df_p, tip.length = 0)
+plot_all <- c_df %>% 
+  ggplot(aes(x = protein, y=mn_pn, color = protein)) +
+  geom_beeswarm(show.legend = FALSE, alpha = 0.5, cex = 1)+
+  stat_summary(fun.data = median_cl, size = 0.25, color = "black") +
+  stat_pvalue_manual(df_p, tip.length = 0) +
+  theme_classic()
+
+print(plot_all)
+
+# If the x value is the combination of 2 columns, need to make a new column uniting the variables prior to using this equation: unite(NewCol, c("var1", "var2"))
